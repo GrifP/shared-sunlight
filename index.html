@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shared Sunlight</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-900">
+  <div id="root"></div>
+  
+  <script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+// Lucide icons as inline SVG
+const Sun = ({ className = "", size = 24 }) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="1" x2="12" y2="3"/>
+    <line x1="12" y1="21" x2="12" y2="23"/>
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+    <line x1="1" y1="12" x2="3" y2="12"/>
+    <line x1="21" y1="12" x2="23" y2="12"/>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </svg>
+);
+
+const Moon = ({ className = "", size = 24 }) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+);
+
+const ChevronLeft = ({ className = "", size = 24 }) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="15 18 9 12 15 6"/>
+  </svg>
+);
+
+const ChevronRight = ({ className = "", size = 24 }) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="9 18 15 12 9 6"/>
+  </svg>
+);
+
+const Share = ({ className = "", size = 24 }) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="18" cy="5" r="3"/>
+    <circle cx="6" cy="12" r="3"/>
+    <circle cx="18" cy="19" r="3"/>
+    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+  </svg>
+);
+
+const Clock = ({ className = "", size = 24 }) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>
+);
+
+// Constants
+const MATCH_THRESHOLD = 0.25; // 15 minutes in decimal hours
+const GRID_STEP = 3; // degrees
+const LAT_MIN = -87;
+const LAT_MAX = 87;
+
+// Land/sea grid - complete data
+const landSeaGrid = [
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,1,0,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,1,0,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,1,0,0,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,0,0,0,0,0,0,0],
+  [1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,0,0,0,1,1,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+  [0,0,0,0,0,0,1,1,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,1,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,1,0,1,1,1,0,0,0,0,0,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,1,0,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,0,0,0,0,1,1,1,1,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,1,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,1,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,1,0,0,0,1,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,1,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,0,0,1,0,0,0,0,0,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+
+function SharedSunlight() {
+  const LAT_MIN = -87;
+  const LAT_MAX = 87;
+
+  const presetLocations = [
+    { lat: 71.2906, lng: -156.7886, name: 'Utqiagvik, US' },
+    { lat: 49.2827, lng: -123.1207, name: 'Vancouver, CA' },
+    { lat: 33.4484, lng: -112.0740, name: 'Phoenix, US' },
+    { lat: 4.7110, lng: -74.0721, name: 'Bogotá, CO' },
+    { lat: 44.2531, lng: -73.1651, name: 'Monkton, US' },
+    { lat: 40.6782, lng: -73.9442, name: 'Brooklyn, US' },
+    { lat: 42.3736, lng: -71.1097, name: 'Cambridge, US' },
+    { lat: -54.8019, lng: -68.3030, name: 'Ushuaia, AR' },
+    { lat: -23.5505, lng: -46.6333, name: 'São Paulo, BR' },
+    { lat: 52.2053, lng: 0.1218, name: 'Cambridge, GB' },
+    { lat: 56.1629, lng: 10.2039, name: 'Aarhus, DK' },
+    { lat: 45.6495, lng: 13.7768, name: 'Trieste, IT' },
+    { lat: 43.3438, lng: 17.8078, name: 'Mostar, BiH' },
+    { lat: -33.9249, lng: 18.4241, name: 'Cape Town, ZA' },
+    { lat: 31.5, lng: 34.4667, name: 'Gaza, PS' },
+    { lat: -1.2864, lng: 36.8172, name: 'Nairobi, KE' },
+    { lat: 42.8746, lng: 74.5698, name: 'Bishkek, KG' },
+    { lat: 23.0225, lng: 72.5714, name: 'Ahmedabad, IN' },
+    { lat: 6.9271, lng: 79.8612, name: 'Colombo, LK' },
+    { lat: -31.9505, lng: 115.8605, name: 'Perth, AU' },
+    { lat: 31.6536, lng: 120.7522, name: 'Changshu, CN' },
+    { lat: 14.5995, lng: 120.9842, name: 'Manila, PH' },
+    { lat: 37.5665, lng: 126.9780, name: 'Seoul, KR' },
+    { lat: -77.8463, lng: 166.6769, name: 'McMurdo, AQ' },
+  ];
+
+  // Initialize state from URL parameters
+  const getInitialState = () => {
+    const params = new URLSearchParams(window.location.search);
+    const lat = params.get('lat');
+    const lng = params.get('lng');
+    const locName = params.get('name');
+    const urlDate = params.get('date');
+    const mode = params.get('mode');
+    const refs = params.get('refs');
+    const customLat = params.get('custom_lat');
+    const customLng = params.get('custom_lng');
+    const customName = params.get('custom_name');
+    
+    // Parse custom comparison locations (can be multiple in future)
+    const customComparisons = [];
+    if (customLat && customLng) {
+      customComparisons.push({
+        lat: parseFloat(customLat),
+        lng: parseFloat(customLng),
+        name: customName || `Custom (${parseFloat(customLat).toFixed(2)}°, ${parseFloat(customLng).toFixed(2)}°)`
+      });
+    }
+    
+    // Get local date in YYYY-MM-DD format
+    const getLocalDateString = () => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    return {
+      location: (lat && lng) ? {
+        lat: parseFloat(lat),
+        lng: parseFloat(lng),
+        name: locName || `Custom (${parseFloat(lat).toFixed(2)}°, ${parseFloat(lng).toFixed(2)}°)`
+      } : { lat: 33.4484, lng: -112.0740, name: 'Phoenix, US' },
+      date: urlDate || getLocalDateString(),
+      viewMode: mode || 'sunrise',
+      referenceLocations: refs ? refs.split(';') : [],
+      customRefLocations: customComparisons
+    };
+  };
+
+  const initial = getInitialState();
+  const [location, setLocation] = useState(initial.location);
+  const [date, setDate] = useState(initial.date);
+  const [viewMode, setViewMode] = useState(initial.viewMode);
+  const [solarData, setSolarData] = useState(null);
+  const [matchingPoints, setMatchingPoints] = useState([]);
+  const [manualLat, setManualLat] = useState('');
+  const [manualLng, setManualLng] = useState('');
+  const [manualName, setManualName] = useState('');
+  // Auto-detect if location is custom (not in presets) and show Coordinates tab
+  const locationIsPreset = presetLocations.some(p => p.name === initial.location.name);
+  const [useManualInput, setUseManualInput] = useState(!locationIsPreset);
+  
+  // Pre-populate manual input fields if location is custom
+  useEffect(() => {
+    if (!locationIsPreset) {
+      setManualLat(location.lat.toString());
+      setManualLng(location.lng.toString());
+      setManualName(location.name.startsWith('Custom (') ? '' : location.name);
+    }
+  }, []);
+  const [referenceLocations, setReferenceLocations] = useState(initial.referenceLocations);
+  const [customRefLocations, setCustomRefLocations] = useState(initial.customRefLocations);
+  const [customRefLat, setCustomRefLat] = useState('');
+  const [customRefLng, setCustomRefLng] = useState('');
+  const [customRefName, setCustomRefName] = useState('');
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [clickedPoint, setClickedPoint] = useState(null);
+  const [showShareToast, setShowShareToast] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update current time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Update URL when state changes
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set('lat', location.lat.toString());
+    params.set('lng', location.lng.toString());
+    params.set('name', location.name);
+    params.set('date', date);
+    params.set('mode', viewMode);
+    if (referenceLocations.length > 0) {
+      params.set('refs', referenceLocations.join(';'));
+    }
+    // For now, save first custom location to URL (backwards compatible)
+    if (customRefLocations.length > 0) {
+      params.set('custom_lat', customRefLocations[0].lat);
+      params.set('custom_lng', customRefLocations[0].lng);
+      if (customRefLocations[0].name) {
+        params.set('custom_name', customRefLocations[0].name);
+      }
+    }
+    
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+  }, [location, date, viewMode, referenceLocations, customRefLocations]);
+
+  // NOAA Solar Calculations - Accurate algorithm
+  const calculateSunriseSunset = (lat, lng, dateStr) => {
+    // UTC-centric: all locations calculate for the same UTC calendar day
+    const date = new Date(dateStr + 'T00:00:00Z');
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth() + 1; // 1-12
+    const day = date.getUTCDate();
+    
+    // Calculate Julian Day - standard astronomical formula
+    let y = year;
+    let m = month;
+    if (m <= 2) {
+      y = y - 1;
+      m = m + 12;
+    }
+    
+    const a = Math.floor(y / 100);
+    const b = 2 - a + Math.floor(a / 4);
+    const jd = Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + day + b - 1524.5;
+    const jdn = jd - 2451545.0;
+    
+    // Calculate equation of time and declination
+    const g = 357.529 + 0.98560028 * jdn;
+    const q = 280.459 + 0.98564736 * jdn;
+    const L = q + 1.915 * Math.sin(g * Math.PI / 180) + 0.020 * Math.sin(2 * g * Math.PI / 180);
+    const e = 23.439 - 0.00000036 * jdn;
+    
+    let ra = Math.atan2(Math.cos(e * Math.PI / 180) * Math.sin(L * Math.PI / 180), Math.cos(L * Math.PI / 180)) * 180 / Math.PI;
+    
+    // Normalize RA to same quadrant as L
+    const lQuad = Math.floor(L / 90) * 90;
+    const raQuad = Math.floor(ra / 90) * 90;
+    ra = ra + (lQuad - raQuad);
+    
+    const dec = Math.asin(Math.sin(e * Math.PI / 180) * Math.sin(L * Math.PI / 180)) * 180 / Math.PI;
+    const eqTime = 4 * (q - ra);
+    
+    // Calculate hour angle
+    const latRad = lat * Math.PI / 180;
+    const decRad = dec * Math.PI / 180;
+    const cosHA = (Math.sin(-0.833 * Math.PI / 180) - Math.sin(latRad) * Math.sin(decRad)) / (Math.cos(latRad) * Math.cos(decRad));
+    
+    if (cosHA > 1) {
+      // Polar night - sun never rises
+      return { sunrise: null, sunset: null, solarNoon: null, declination: dec, polarNight: true };
+    }
+    if (cosHA < -1) {
+      // Midnight sun - sun never sets
+      return { sunrise: null, sunset: null, solarNoon: null, declination: dec, midnightSun: true };
+    }
+    
+    const ha = Math.acos(cosHA) * 180 / Math.PI;
+    
+    // Calculate sunrise and sunset in minutes from midnight
+    const solarNoonMin = 720 - 4 * lng - eqTime;
+    const sunriseMin = solarNoonMin - 4 * ha;
+    const sunsetMin = solarNoonMin + 4 * ha;
+    
+    const toTimeStringWithDate = (minutes, baseDate) => {
+      let totalMinutes = minutes;
+      let dayOffset = 0;
+      
+      // Normalize and track day offset
+      while (totalMinutes < 0) {
+        totalMinutes += 1440; // minutes in a day
+        dayOffset -= 1;
+      }
+      while (totalMinutes >= 1440) {
+        totalMinutes -= 1440;
+        dayOffset += 1;
+      }
+      
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = Math.floor(totalMinutes % 60);
+      const timeStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+      
+      // Only show date if it's actually different from input date
+      let actualDate = null;
+      if (dayOffset !== 0) {
+        const resultDate = new Date(baseDate);
+        resultDate.setUTCDate(resultDate.getUTCDate() + dayOffset);
+        const resultDateStr = resultDate.toISOString().split('T')[0];
+        const baseDateStr = baseDate.toISOString().split('T')[0];
+        if (resultDateStr !== baseDateStr) {
+          actualDate = resultDateStr;
+        }
+      }
+      
+      return { time: timeStr, date: actualDate, hours: totalMinutes / 60 };
+    };
+    
+    const sunriseData = toTimeStringWithDate(sunriseMin, date);
+    const sunsetData = toTimeStringWithDate(sunsetMin, date);
+    const noonData = toTimeStringWithDate(solarNoonMin, date);
+    
+    return {
+      sunrise: sunriseData.time,
+      sunriseDate: sunriseData.date,
+      sunset: sunsetData.time,
+      sunsetDate: sunsetData.date,
+      solarNoon: noonData.time,
+      declination: dec,
+      sunriseDecimal: sunriseData.hours,
+      sunsetDecimal: sunsetData.hours
+    };
+  };
+
+  const calculateSharedDaylight = (primarySolar, secondarySolar) => {
+    // Handle polar night (no shared daylight possible)
+    if (primarySolar.polarNight || secondarySolar.polarNight) {
+      return { hours: 0, minutes: 0, periods: [] };
+    }
+
+    const timeToMinutes = (timeStr, dateOffset = 0) => {
+      const [hours, mins] = timeStr.split(':').map(Number);
+      return hours * 60 + mins + (dateOffset * 1440);
+    };
+
+    // If primary has midnight sun, return secondary's full daylight duration
+    if (primarySolar.midnightSun && secondarySolar.sunrise) {
+      const secSunriseMin = timeToMinutes(secondarySolar.sunrise, secondarySolar.sunriseDate ? -1 : 0);
+      const secSunsetMin = timeToMinutes(secondarySolar.sunset, secondarySolar.sunsetDate ? 1 : 0);
+      const daylightMinutes = secSunsetMin - secSunriseMin;
+      return {
+        hours: Math.floor(daylightMinutes / 60),
+        minutes: Math.floor(daylightMinutes % 60),
+        periods: [[secSunriseMin, secSunsetMin]]
+      };
+    }
+
+    // If secondary has midnight sun, return primary's full daylight duration  
+    if (secondarySolar.midnightSun && primarySolar.sunrise) {
+      const priSunriseMin = timeToMinutes(primarySolar.sunrise, primarySolar.sunriseDate ? -1 : 0);
+      const priSunsetMin = timeToMinutes(primarySolar.sunset, primarySolar.sunsetDate ? 1 : 0);
+      const daylightMinutes = priSunsetMin - priSunriseMin;
+      return {
+        hours: Math.floor(daylightMinutes / 60),
+        minutes: Math.floor(daylightMinutes % 60),
+        periods: [[priSunriseMin, priSunsetMin]]
+      };
+    }
+
+    // Both midnight sun
+    if (primarySolar.midnightSun && secondarySolar.midnightSun) {
+      return { hours: 24, minutes: 0, periods: [[0, 1440]] };
+    }
+
+    // Normal case: both have regular sunrise/sunset
+    if (!primarySolar.sunrise || !secondarySolar.sunrise) {
+      return { hours: 0, minutes: 0, periods: [] };
+    }
+
+    // Convert times to minutes from UTC midnight
+    const priSunriseMin = timeToMinutes(primarySolar.sunrise, primarySolar.sunriseDate ? -1 : 0);
+    const priSunsetMin = timeToMinutes(primarySolar.sunset, primarySolar.sunsetDate ? 1 : 0);
+    const secSunriseMin = timeToMinutes(secondarySolar.sunrise, secondarySolar.sunriseDate ? -1 : 0);
+    const secSunsetMin = timeToMinutes(secondarySolar.sunset, secondarySolar.sunsetDate ? 1 : 0);
+
+    // Check for overlap, including wrapping across days
+    // We need to check yesterday's, today's, and tomorrow's secondary daylight
+    let overlapMinutes = 0;
+    const periods = [];
+
+    for (let dayOffset = -1; dayOffset <= 1; dayOffset++) {
+      const secStart = secSunriseMin + (dayOffset * 1440);
+      const secEnd = secSunsetMin + (dayOffset * 1440);
+      
+      const overlapStart = Math.max(priSunriseMin, secStart);
+      const overlapEnd = Math.min(priSunsetMin, secEnd);
+      
+      if (overlapEnd > overlapStart) {
+        overlapMinutes += overlapEnd - overlapStart;
+        periods.push([overlapStart, overlapEnd]);
+      }
+    }
+    
+    if (overlapMinutes === 0) {
+      return { hours: 0, minutes: 0, periods: [] };
+    }
+
+    return {
+      hours: Math.floor(overlapMinutes / 60),
+      minutes: Math.floor(overlapMinutes % 60),
+      periods
+    };
+  };
+
+  const isLand = (lat, lng) => {
+    const rowIndex = Math.round((87 - lat) / 4.047);
+    const colIndex = Math.round((lng + 180) / 3);
+    
+    if (rowIndex < 0 || rowIndex >= 44 || colIndex < 0 || colIndex >= 120) {
+      return false;
+    }
+    
+    return landSeaGrid[rowIndex][colIndex] === 1;
+  };
+
+  const findMatchingLocations = useMemo(() => {
+    if (!solarData) return [];
+    
+    // For polar conditions, calculate solar noon from longitude
+    let referenceSunriseDecimal = solarData.sunriseDecimal;
+    let referenceSunsetDecimal = solarData.sunsetDecimal;
+    
+    if (solarData.midnightSun || solarData.polarNight) {
+      // Calculate solar noon time in decimal hours
+      const lng = location.lng;
+      const solarNoonHour = 12 - (lng / 15);
+      const normalizedHour = ((solarNoonHour + 24) % 24);
+      referenceSunriseDecimal = normalizedHour;
+      referenceSunsetDecimal = normalizedHour;
+    }
+    
+    // Skip if we still don't have reference times
+    if (referenceSunriseDecimal === undefined && referenceSunsetDecimal === undefined) return [];
+    
+    const points = [];
+
+    for (let lat = LAT_MIN; lat <= LAT_MAX; lat += GRID_STEP) {
+      for (let lng = -180; lng < 180; lng += GRID_STEP) {
+        const data = calculateSunriseSunset(lat, lng, date);
+        if (!data.sunrise) continue;
+
+        let match = false;
+        let label = '';
+        
+        if (viewMode === 'sunrise' && referenceSunriseDecimal !== undefined) {
+          const timeDiffSunrise = Math.abs(data.sunriseDecimal - referenceSunriseDecimal);
+          if (timeDiffSunrise < MATCH_THRESHOLD) {
+            match = true;
+            label = 'sunrise-simultaneous';
+          }
+          
+          const sunsetDiff = Math.abs(data.sunsetDecimal - referenceSunriseDecimal);
+          const sunsetDiffWrapped = Math.min(sunsetDiff, 24 - sunsetDiff);
+          if (sunsetDiffWrapped < MATCH_THRESHOLD) {
+            match = true;
+            label = 'sunset-at-your-sunrise';
+          }
+        }
+        
+        if (viewMode === 'sunset' && referenceSunsetDecimal !== undefined) {
+          const timeDiffSunset = Math.abs(data.sunsetDecimal - referenceSunsetDecimal);
+          if (timeDiffSunset < MATCH_THRESHOLD) {
+            match = true;
+            label = 'sunset-simultaneous';
+          }
+          
+          const sunriseDiff = Math.abs(data.sunriseDecimal - referenceSunsetDecimal);
+          const sunriseDiffWrapped = Math.min(sunriseDiff, 24 - sunriseDiff);
+          if (sunriseDiffWrapped < MATCH_THRESHOLD) {
+            match = true;
+            label = 'sunrise-at-your-sunset';
+          }
+        }
+
+        if (match) {
+          points.push({ lat, lng, label });
+        }
+      }
+    }
+
+    return points;
+  }, [solarData, date, viewMode]);
+
+  useEffect(() => {
+    const data = calculateSunriseSunset(location.lat, location.lng, date);
+    setSolarData(data);
+  }, [location, date]);
+
+  useEffect(() => {
+    setMatchingPoints(findMatchingLocations);
+  }, [findMatchingLocations]);
+
+  // Combine all reference locations, maintaining insertion order
+  // Since we add with [...old, new] for presets and [new, ...old] for custom,
+  // we need to reverse presets to get newest-first, then interleave
+  // But we can't truly interleave without timestamps. Best approximation:
+  // Put all customs first (already newest-first), then all presets (reversed to newest-first)
+  const allReferenceLocations = [
+    ...customRefLocations, // newest first (added with [new, ...old])
+    ...referenceLocations.map(name => presetLocations.find(l => l.name === name)).filter(Boolean).reverse() // newest first
+  ];
+
+  const mapWidth = 900;
+  const mapHeight = 450;
+  
+  const projectPoint = (lat, lng) => {
+    const x = ((lng + 180) / 360) * mapWidth;
+    const y = ((87 - lat) / 174) * mapHeight;
+    return { x, y };
+  };
+
+  const handleManualLocationSubmit = () => {
+    const lat = parseFloat(manualLat);
+    const lng = parseFloat(manualLng);
+    
+    if (isNaN(lat) || isNaN(lng) || lat < LAT_MIN || lat > LAT_MAX || lng < -180 || lng > 180) {
+      alert(`Please enter valid coordinates (Lat: ${LAT_MIN} to ${LAT_MAX}, Lng: -180 to 180)`);
+      return;
+    }
+    
+    const name = manualName.trim() || `Custom (${lat.toFixed(2)}°, ${lng.toFixed(2)}°)`;
+    setLocation({ lat, lng, name });
+  };
+
+  const adjustDate = (days) => {
+    const currentDate = new Date(date + 'T12:00:00');
+    currentDate.setDate(currentDate.getDate() + days);
+    setDate(currentDate.toISOString().split('T')[0]);
+  };
+
+  const adjustMonth = (months) => {
+    const currentDate = new Date(date + 'T12:00:00');
+    currentDate.setMonth(currentDate.getMonth() + months);
+    setDate(currentDate.toISOString().split('T')[0]);
+  };
+
+  const resetToToday = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const day = today.getDate().toString().padStart(2, '0');
+    setDate(`${year}-${month}-${day}`);
+  };
+
+  const handleShareClick = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+      setShowShareToast(true);
+      setTimeout(() => setShowShareToast(false), 2000);
+    });
+  };
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+  const isToday = date === todayStr;
+
+  // Calculate solar data for reference locations
+  const referenceLocationsData = useMemo(() => {
+    return allReferenceLocations
+      .filter(loc => loc.name !== location.name)
+      .map(loc => {
+        const solar = calculateSunriseSunset(loc.lat, loc.lng, date);
+        const shared = solarData ? calculateSharedDaylight(solarData, solar) : null;
+        const isCustom = customRefLocations.some(custom => 
+          custom.lat === loc.lat && custom.lng === loc.lng
+        );
+        const isPreset = presetLocations.some(preset => preset.name === loc.name);
+        return {
+          ...loc,
+          solar,
+          shared,
+          isCustom,
+          isPreset
+        };
+      });
+  }, [allReferenceLocations, location.name, date, solarData, customRefLocations]);
+
+  return (
+    <div className="w-full max-w-7xl mx-auto p-3 bg-zinc-900 text-white min-h-screen">
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <h1 className="text-4xl font-bold mb-2 text-stone-300">
+            Shared Sunlight
+          </h1>
+          <p className="text-stone-300 text-base max-w-3xl mt-3">
+            This tool calculates sunrise and sunset times using NOAA's solar position algorithm, then displays where on Earth these transitions are happening simultaneously. The map uses an equirectangular projection at 3° resolution, meaning that each dot represents roughly 330km × 330km at the equator.
+          </p>
+          <p className="text-stone-300 text-base max-w-3xl mt-3">
+            All times are displayed in UTC. The selected date represents a UTC calendar day - locations in the Western Hemisphere (west of Greenwich) should subtract one day to see their local calendar date. Your local time is currently {currentTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}, {Math.abs(currentTime.getTimezoneOffset() / 60)} hours {currentTime.getTimezoneOffset() > 0 ? 'behind' : 'ahead of'} UTC.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <a
+            href="https://github.com/YOUR_USERNAME/YOUR_REPO"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-white p-2 rounded"
+            title="View on GitHub"
+          >
+            <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+          </a>
+          <button
+            onClick={handleShareClick}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-sm font-medium"
+          >
+            <Share size={16} />
+            Share
+          </button>
+        </div>
+      </div>
+
+      {showShareToast && (
+        <div className="fixed top-4 right-4 bg-indigo-600 text-white px-4 py-2 rounded shadow-lg z-50 font-medium">
+          Link copied to clipboard!
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        {/* Primary Location */}
+        <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
+          <div>
+            <label className="block text-base font-bold mb-2 text-stone-300">Primary Location</label>
+            
+            <div className="flex gap-2 mb-2">
+              <button
+                onClick={() => setUseManualInput(false)}
+                className={`px-2 py-1 text-xs rounded border ${!useManualInput ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-900 border-zinc-700'}`}
+              >
+                List
+              </button>
+              <button
+                onClick={() => setUseManualInput(true)}
+                className={`px-2 py-1 text-xs rounded border ${useManualInput ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-900 border-zinc-700'}`}
+              >
+                Coordinates
+              </button>
+            </div>
+
+            {!useManualInput ? (
+              <select 
+                value={location.name}
+                onChange={(e) => {
+                  const loc = presetLocations.find(l => l.name === e.target.value);
+                  if (loc) setLocation(loc);
+                }}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm"
+              >
+                {presetLocations.map(loc => (
+                  <option key={loc.name} value={loc.name}>{loc.name}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="space-y-1">
+                <input 
+                  type="text" 
+                  placeholder="Location name (optional)"
+                  value={manualName}
+                  onChange={(e) => setManualName(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs"
+                />
+                <input 
+                  type="number" 
+                  placeholder="Latitude"
+                  value={manualLat}
+                  onChange={(e) => setManualLat(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs"
+                  step="0.0001"
+                  min="-87"
+                  max="87"
+                />
+                <input 
+                  type="number" 
+                  placeholder="Longitude"
+                  value={manualLng}
+                  onChange={(e) => setManualLng(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs"
+                  step="0.0001"
+                  min="-180"
+                  max="180"
+                />
+                <button 
+                  onClick={handleManualLocationSubmit}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded text-xs"
+                >
+                  Set
+                </button>
+              </div>
+            )}
+            
+            <div className="text-xs text-stone-400 mt-2">
+              {location.lat.toFixed(2)}°, {location.lng.toFixed(2)}°
+            </div>
+            
+            {solarData && solarData.sunrise && (
+              <div className="text-sm text-stone-300 mt-2 space-y-1 font-medium">
+                <div className="flex items-center gap-1">
+                  <Sun size={14} className="text-cyan-400" />
+                  <span>{solarData.sunrise} UTC</span>
+                  {solarData.sunriseDate && (
+                    <span className="text-stone-400 text-xs">
+                      ({new Date(solarData.sunriseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Moon size={14} className="text-pink-500" />
+                  <span>{solarData.sunset} UTC</span>
+                  {solarData.sunsetDate && (
+                    <span className="text-stone-400 text-xs">
+                      ({new Date(solarData.sunsetDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Clock size={14} className="text-yellow-400" />
+                  <span>{(() => {
+                    let sunriseMin = parseInt(solarData.sunrise.split(':')[0]) * 60 + parseInt(solarData.sunrise.split(':')[1]);
+                    let sunsetMin = parseInt(solarData.sunset.split(':')[0]) * 60 + parseInt(solarData.sunset.split(':')[1]);
+                    
+                    // Adjust for date offsets
+                    if (solarData.sunriseDate) sunriseMin -= 1440;
+                    if (solarData.sunsetDate) sunsetMin += 1440;
+                    
+                    const daylightMin = sunsetMin - sunriseMin;
+                    const hours = Math.floor(daylightMin / 60);
+                    const mins = daylightMin % 60;
+                    return `${hours}h ${mins}m daylight`;
+                  })()}</span>
+                </div>
+              </div>
+            )}
+            {solarData && !solarData.sunrise && (
+              <div className="text-sm text-stone-300 mt-2 font-medium">
+                <div className="flex items-center gap-1">
+                  {solarData.midnightSun ? (
+                    <>
+                      <Sun size={14} className="text-cyan-400" />
+                      <span>Midnight sun</span>
+                    </>
+                  ) : solarData.polarNight ? (
+                    <>
+                      <Moon size={14} className="text-pink-500" />
+                      <span>Polar night</span>
+                    </>
+                  ) : (
+                    <span>No sunrise/sunset</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Date */}
+        <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
+          <div>
+            <label className="block text-base font-bold mb-2 text-stone-300">UTC Day</label>
+            
+            <div className="flex items-center gap-1 mb-2">
+              <button
+                onClick={() => adjustDate(-1)}
+                className="bg-zinc-900 hover:bg-indigo-900 p-1 rounded"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              
+              <input 
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs"
+              />
+              
+              <button
+                onClick={() => adjustDate(1)}
+                className="bg-zinc-900 hover:bg-indigo-900 p-1 rounded"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+            
+            <p className="text-stone-400 text-xs mb-2">
+              Western Hemisphere: subtract 1 day for local date
+            </p>
+            
+            <div className="flex gap-1 mb-2">
+              <button
+                onClick={() => adjustMonth(-1)}
+                className="flex-1 bg-zinc-900 hover:bg-indigo-900 px-2 py-1 rounded text-xs border border-zinc-700"
+              >
+                ← Month
+              </button>
+              <button
+                onClick={resetToToday}
+                disabled={isToday}
+                className={`flex-1 px-2 py-1 rounded text-xs border ${isToday ? 'bg-zinc-900 opacity-50 cursor-not-allowed border-zinc-700' : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600'}`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => adjustMonth(1)}
+                className="flex-1 bg-zinc-900 hover:bg-indigo-900 px-2 py-1 rounded text-xs border border-zinc-700"
+              >
+                Month →
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
+        <div className="lg:col-span-3">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
+            <div className="mb-3">
+              <h3 className="text-base font-bold text-stone-300 mb-1">Shared Daylight with {location.name}</h3>
+              {(() => {
+                const activeLocations = referenceLocationsData.filter(loc => 
+                  referenceLocations.includes(loc.name) || 
+                  customRefLocations.some(c => c.lat === loc.lat && c.lng === loc.lng)
+                );
+                
+                if (activeLocations.length === 0) {
+                  return (
+                    <div className="text-sm text-stone-400">
+                      Select a comparison location to see shared sunlight
+                    </div>
+                  );
+                }
+                
+                // Calculate intersection
+                let intersectedPeriods = activeLocations[0].shared?.periods || [];
+                
+                if (!intersectedPeriods || intersectedPeriods.length === 0) {
+                  return (
+                    <div className="text-sm text-stone-400">
+                      No shared sunlight between {activeLocations.length + 1} locations
+                    </div>
+                  );
+                }
+                
+                for (let i = 1; i < activeLocations.length; i++) {
+                  const locPeriods = activeLocations[i].shared?.periods || [];
+                  if (locPeriods.length === 0) {
+                    return (
+                      <div className="text-sm text-stone-400">
+                        No shared sunlight between {activeLocations.length + 1} locations
+                      </div>
+                    );
+                  }
+                  
+                  const newPeriods = [];
+                  for (const [aStart, aEnd] of intersectedPeriods) {
+                    for (const [bStart, bEnd] of locPeriods) {
+                      const overlapStart = Math.max(aStart, bStart);
+                      const overlapEnd = Math.min(aEnd, bEnd);
+                      if (overlapEnd > overlapStart) {
+                        newPeriods.push([overlapStart, overlapEnd]);
+                      }
+                    }
+                  }
+                  intersectedPeriods = newPeriods;
+                  
+                  if (intersectedPeriods.length === 0) {
+                    return (
+                      <div className="text-sm text-stone-400">
+                        No shared sunlight between {activeLocations.length + 1} locations
+                      </div>
+                    );
+                  }
+                }
+                
+                const totalMinutes = intersectedPeriods.reduce((sum, [start, end]) => sum + (end - start), 0);
+                if (totalMinutes <= 0) {
+                  return (
+                    <div className="text-sm text-stone-400">
+                      No shared sunlight between {activeLocations.length + 1} locations
+                    </div>
+                  );
+                }
+                
+                const hours = Math.floor(totalMinutes / 60);
+                const mins = Math.floor(totalMinutes % 60);
+                
+                return (
+                  <div className="text-sm text-stone-300">
+                    <span className="text-yellow-400 font-semibold">{hours}h {mins}m</span> of shared sunlight between {activeLocations.length + 1} locations
+                  </div>
+                );
+              })()}
+            </div>
+            
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => setViewMode('sunrise')}
+                className={`px-4 py-1 rounded text-xs border ${viewMode === 'sunrise' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-900 hover:bg-indigo-900 border-zinc-700'}`}
+              >
+                At My Sunrise
+              </button>
+              <button
+                onClick={() => setViewMode('sunset')}
+                className={`px-4 py-1 rounded text-xs border ${viewMode === 'sunset' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-zinc-900 hover:bg-indigo-900 border-zinc-700'}`}
+              >
+                At My Sunset
+              </button>
+            </div>
+
+            <div className="relative bg-zinc-900 rounded overflow-hidden border border-zinc-700">
+              <svg 
+                width={mapWidth} 
+                height={mapHeight} 
+                viewBox={`0 0 ${mapWidth} ${mapHeight}`} 
+                className="w-full h-auto"
+                onMouseMove={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+                  const scaleX = mapWidth / rect.width;
+                  const scaleY = mapHeight / rect.height;
+                  const svgX = x * scaleX;
+                  const svgY = y * scaleY;
+                  
+                  const lng = (svgX / mapWidth) * 360 - 180;
+                  const lat = 87 - (svgY / mapHeight) * 174;
+                  
+                  const snapLat = Math.round(lat / 3) * 3;
+                  const snapLng = Math.round(lng / 3) * 3;
+                  
+                  if (snapLat >= -87 && snapLat <= 87 && snapLng >= -180 && snapLng < 180) {
+                    setHoveredPoint({ lat: snapLat, lng: snapLng });
+                  }
+                }}
+                onMouseLeave={() => setHoveredPoint(null)}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+                  const scaleX = mapWidth / rect.width;
+                  const scaleY = mapHeight / rect.height;
+                  const svgX = x * scaleX;
+                  const svgY = y * scaleY;
+                  
+                  const lng = (svgX / mapWidth) * 360 - 180;
+                  const lat = 87 - (svgY / mapHeight) * 174;
+                  
+                  const snapLat = Math.round(lat / 3) * 3;
+                  const snapLng = Math.round(lng / 3) * 3;
+                  
+                  if (snapLat >= -87 && snapLat <= 87 && snapLng >= -180 && snapLng < 180) {
+                    setClickedPoint({ lat: snapLat, lng: snapLng });
+                  }
+                }}
+              >
+                <rect width={mapWidth} height={mapHeight} fill="#18181b" />
+                
+                {[-60, -30, 0, 30, 60].map(lat => {
+                  const y = ((87 - lat) / 174) * mapHeight;
+                  return (
+                    <line 
+                      key={`lat-${lat}`}
+                      x1="0" 
+                      y1={y} 
+                      x2={mapWidth} 
+                      y2={y} 
+                      stroke="rgba(255,255,255,0.15)" 
+                      strokeWidth="1" 
+                      strokeDasharray={lat === 0 ? "5,5" : "2,4"}
+                    />
+                  );
+                })}
+                
+                {[-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150].map(lng => {
+                  const x = ((lng + 180) / 360) * mapWidth;
+                  return (
+                    <line 
+                      key={`lng-${lng}`}
+                      x1={x} 
+                      y1="0" 
+                      x2={x} 
+                      y2={mapHeight} 
+                      stroke="rgba(255,255,255,0.15)" 
+                      strokeWidth="1" 
+                      strokeDasharray={lng === 0 ? "5,5" : "2,4"}
+                    />
+                  );
+                })}
+                
+                {(() => {
+                  const dots = [];
+                  const step = 3;
+                  
+                  const matchingPointsMap = {};
+                  matchingPoints.forEach(p => {
+                    matchingPointsMap[`${p.lat},${p.lng}`] = p.label;
+                  });
+                  
+                  // Determine reference time based on mode
+                  let referenceTime = null;
+                  let referenceTimeOffset = 0;
+                  if (solarData) {
+                    if (viewMode === 'sunrise' && solarData.sunrise) {
+                      referenceTime = solarData.sunrise;
+                      referenceTimeOffset = solarData.sunriseDate ? -1 : 0;
+                    } else if (viewMode === 'sunset' && solarData.sunset) {
+                      referenceTime = solarData.sunset;
+                      referenceTimeOffset = solarData.sunsetDate ? 1 : 0;
+                    } else if (solarData.midnightSun || solarData.polarNight) {
+                      // For polar day/night, use solar noon as reference
+                      // Calculate it from longitude even if no sunrise/sunset
+                      const lng = location.lng;
+                      const solarNoonHour = 12 - (lng / 15);
+                      const normalizedHour = ((solarNoonHour + 24) % 24);
+                      const h = Math.floor(normalizedHour);
+                      const m = Math.round((normalizedHour - h) * 60);
+                      referenceTime = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                      referenceTimeOffset = 0;
+                    }
+                  }
+                  
+                  const timeToMinutes = (timeStr, dateOffset = 0) => {
+                    const [h, m] = timeStr.split(':').map(Number);
+                    return h * 60 + m + (dateOffset * 1440);
+                  };
+                  
+                  const referenceMin = referenceTime ? timeToMinutes(referenceTime, referenceTimeOffset) : null;
+                  
+                  for (let lat = -87; lat <= 87; lat += step) {
+                    for (let lng = -180; lng < 180; lng += step) {
+                      const key = `${lat},${lng}`;
+                      const pos = projectPoint(lat, lng);
+                      const solarEvent = matchingPointsMap[key];
+                      
+                      let color = null;
+                      let opacity = 0.7;
+                      
+                      if (solarEvent) {
+                        // Cyan for sunrise, magenta for sunset
+                        if (solarEvent === 'sunrise-simultaneous' || solarEvent === 'sunrise-at-your-sunset') {
+                          color = '#06b6d4';
+                        } else if (solarEvent === 'sunset-simultaneous' || solarEvent === 'sunset-at-your-sunrise') {
+                          color = '#EC4899';
+                        }
+                      } else {
+                        // Calculate if this point is in daylight at the reference time
+                        let inDaylight = false;
+                        
+                        if (referenceMin !== null) {
+                          const pointSolar = calculateSunriseSunset(lat, lng, date);
+                          
+                          if (pointSolar.midnightSun) {
+                            inDaylight = true;
+                          } else if (!pointSolar.polarNight && pointSolar.sunrise && pointSolar.sunset) {
+                            const sunriseMin = timeToMinutes(pointSolar.sunrise, pointSolar.sunriseDate ? -1 : 0);
+                            const sunsetMin = timeToMinutes(pointSolar.sunset, pointSolar.sunsetDate ? 1 : 0);
+                            
+                            // Check if reference time falls within this point's daylight period
+                            // Need to handle wrap-around: if sunset < sunrise, the period crosses midnight
+                            if (sunsetMin > sunriseMin) {
+                              // Normal case: sunrise before sunset
+                              inDaylight = referenceMin >= sunriseMin && referenceMin <= sunsetMin;
+                            } else {
+                              // Wraps midnight: either after sunrise OR before sunset
+                              inDaylight = referenceMin >= sunriseMin || referenceMin <= sunsetMin;
+                            }
+                            
+                            // Also check +/- 1 day to handle date line issues
+                            if (!inDaylight) {
+                              const refMinYesterday = referenceMin - 1440;
+                              const refMinTomorrow = referenceMin + 1440;
+                              
+                              if (sunsetMin > sunriseMin) {
+                                inDaylight = (refMinYesterday >= sunriseMin && refMinYesterday <= sunsetMin) ||
+                                           (refMinTomorrow >= sunriseMin && refMinTomorrow <= sunsetMin);
+                              } else {
+                                inDaylight = (refMinYesterday >= sunriseMin || refMinYesterday <= sunsetMin) ||
+                                           (refMinTomorrow >= sunriseMin || refMinTomorrow <= sunsetMin);
+                              }
+                            }
+                          }
+                        }
+                        
+                        if (isLand(lat, lng)) {
+                          // Land dots: bright yellow in daylight, dim stone at night
+                          color = inDaylight ? '#FCD34D' : '#a8a29e';
+                          opacity = inDaylight ? 0.7 : 0.4;
+                        } else {
+                          // Ocean dots: subtle cyan tint in daylight
+                          color = inDaylight ? '#164e63' : null;
+                          opacity = inDaylight ? 0.25 : 0;
+                        }
+                      }
+                      
+                      if (color) {
+                        dots.push(
+                          <circle
+                            key={key}
+                            cx={pos.x}
+                            cy={pos.y}
+                            r="2"
+                            fill={color}
+                            opacity={opacity}
+                          />
+                        );
+                      }
+                    }
+                  }
+                  
+                  return dots;
+                })()}
+                
+                <g>
+                  <circle
+                    cx={projectPoint(location.lat, location.lng).x}
+                    cy={projectPoint(location.lat, location.lng).y}
+                    r="6"
+                    fill="yellow"
+                    stroke="white"
+                    strokeWidth="2"
+                  />
+                  <text
+                    x={projectPoint(location.lat, location.lng).x}
+                    y={projectPoint(location.lat, location.lng).y - 12}
+                    fill="yellow"
+                    fontSize="12"
+                    fontWeight="bold"
+                    textAnchor="middle"
+                    stroke="black"
+                    strokeWidth="0.5"
+                  >
+                    {location.name}
+                  </text>
+                </g>
+                
+                {allReferenceLocations.filter(loc => loc.name !== location.name).map((loc, i) => {
+                  const pos = projectPoint(loc.lat, loc.lng);
+                  return (
+                    <g key={i}>
+                      <circle
+                        cx={pos.x}
+                        cy={pos.y}
+                        r="5"
+                        fill="white"
+                        stroke="black"
+                        strokeWidth="2"
+                      />
+                      <text
+                        x={pos.x}
+                        y={pos.y - 10}
+                        fill="white"
+                        fontSize="11"
+                        fontWeight="bold"
+                        textAnchor="middle"
+                        stroke="black"
+                        strokeWidth="0.5"
+                      >
+                        {loc.name}
+                      </text>
+                    </g>
+                  );
+                })}
+                
+                {hoveredPoint && (
+                  <g>
+                    <rect
+                      x={projectPoint(hoveredPoint.lat, hoveredPoint.lng).x - 60}
+                      y={projectPoint(hoveredPoint.lat, hoveredPoint.lng).y - 30}
+                      width="120"
+                      height="20"
+                      fill="rgba(0,0,0,0.9)"
+                      rx="4"
+                    />
+                    <text
+                      x={projectPoint(hoveredPoint.lat, hoveredPoint.lng).x}
+                      y={projectPoint(hoveredPoint.lat, hoveredPoint.lng).y - 16}
+                      fill="#a8a29e"
+                      fontSize="11"
+                      textAnchor="middle"
+                    >
+                      {hoveredPoint.lat.toFixed(1)}°, {hoveredPoint.lng.toFixed(1)}°
+                    </text>
+                  </g>
+                )}
+              </svg>
+              
+              {/* Click popup */}
+              {clickedPoint && (() => {
+                const pos = projectPoint(clickedPoint.lat, clickedPoint.lng);
+                const xPercent = (pos.x / mapWidth) * 100;
+                const yPercent = (pos.y / mapHeight) * 100;
+                
+                // Smart positioning - flip to opposite side if near edges
+                let transformX = '-50%'; // default: center horizontally
+                let transformY = '-120%'; // default: above the point
+                
+                if (xPercent < 20) transformX = '0%'; // near left edge: align left
+                if (xPercent > 80) transformX = '-100%'; // near right edge: align right
+                if (yPercent < 25) transformY = '20%'; // near top edge: below the point
+                
+                return (
+                  <div 
+                    className="absolute bg-zinc-800 border border-zinc-600 rounded-lg shadow-lg p-3"
+                    style={{
+                      left: `${xPercent}%`,
+                      top: `${yPercent}%`,
+                      transform: `translate(${transformX}, ${transformY})`,
+                      minWidth: '200px',
+                      zIndex: 50
+                    }}
+                  >
+                    <div className="text-xs text-stone-300 mb-2 font-medium">
+                      {clickedPoint.lat.toFixed(2)}°, {clickedPoint.lng.toFixed(2)}°
+                    </div>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${clickedPoint.lat},${clickedPoint.lng}&zoom=8`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-indigo-400 hover:text-indigo-300 underline block mb-2"
+                    >
+                      Open in Google Maps
+                    </a>
+                    <div className="border-t border-zinc-600 pt-2 space-y-2">
+                      <input
+                        type="text"
+                        placeholder="Location name (optional)"
+                        defaultValue={`Custom (${clickedPoint.lat.toFixed(2)}°, ${clickedPoint.lng.toFixed(2)}°)`}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white"
+                        id="clickedLocationName"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const name = e.target.value.trim() || `Custom (${clickedPoint.lat.toFixed(2)}°, ${clickedPoint.lng.toFixed(2)}°)`;
+                            setCustomRefLocations([{ lat: clickedPoint.lat, lng: clickedPoint.lng, name }, ...customRefLocations]);
+                            setClickedPoint(null);
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          const nameInput = document.getElementById('clickedLocationName');
+                          const name = nameInput.value.trim() || `Custom (${clickedPoint.lat.toFixed(2)}°, ${clickedPoint.lng.toFixed(2)}°)`;
+                          setCustomRefLocations([{ lat: clickedPoint.lat, lng: clickedPoint.lng, name }, ...customRefLocations]);
+                          setClickedPoint(null);
+                        }}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded text-xs border border-indigo-600"
+                      >
+                        Add to Comparisons
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => setClickedPoint(null)}
+                      className="absolute -top-2 -right-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+            
+            {/* Legend */}
+            <div className="text-xs text-stone-400 mt-3">
+              {viewMode === 'sunrise' && (
+                <>
+                  <span style={{color: '#06b6d4'}}>Sunrise</span> <span style={{color: '#06b6d4'}}>at your sunrise</span> • <span style={{color: '#FCD34D'}}>Daylight</span> • <span style={{color: '#EC4899'}}>Sunset</span> <span style={{color: '#EC4899'}}>at your sunrise</span>
+                </>
+              )}
+              {viewMode === 'sunset' && (
+                <>
+                  <span style={{color: '#06b6d4'}}>Sunrise</span> <span style={{color: '#06b6d4'}}>at your sunset</span> • <span style={{color: '#FCD34D'}}>Daylight</span> • <span style={{color: '#EC4899'}}>Sunset</span> <span style={{color: '#EC4899'}}>at your sunset</span>
+                </>
+              )}
+            </div>
+          </div>
+          
+          {/* Annual Shared Daylight Graph */}
+          {(() => {
+            const graphWidth = 900;
+            const graphHeight = 320;
+            const padding = { top: 20, right: 20, bottom: 50, left: 50 };
+            const plotWidth = graphWidth - padding.left - padding.right;
+            const plotHeight = graphHeight - padding.top - padding.bottom;
+            
+            const activeLocations = referenceLocationsData.filter(loc => 
+              referenceLocations.includes(loc.name) || 
+              customRefLocations.some(c => c.lat === loc.lat && c.lng === loc.lng)
+            );
+            
+            const currentYear = new Date(date).getFullYear();
+            
+            // Empty state - no comparison locations
+            if (activeLocations.length === 0) {
+              return (
+                <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 mt-4">
+                  <h3 className="text-base font-bold text-stone-300 mb-2">Annual Shared Daylight with {location.name}</h3>
+                  <p className="text-sm text-stone-400 mb-4">Add a comparison city to view shared sunlight over time</p>
+                  
+                  <svg width={graphWidth} height={graphHeight} className="w-full" >
+                    {/* Background */}
+                    <rect x={padding.left} y={padding.top} width={plotWidth} height={plotHeight} fill="#18181b" />
+                    
+                    {/* Grid lines */}
+                    {[0, 6, 12, 18, 24].map(hour => {
+                      const y = padding.top + plotHeight - (hour / 24) * plotHeight;
+                      return (
+                        <g key={hour}>
+                          <line x1={padding.left} y1={y} x2={padding.left + plotWidth} y2={y} stroke="#3f3f46" strokeWidth="1" />
+                          <text x={padding.left - 10} y={y} fill="#a8a29e" fontSize="10" textAnchor="end" alignmentBaseline="middle">{hour}h</text>
+                        </g>
+                      );
+                    })}
+                    
+                    {/* Month markers */}
+                    {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, i) => {
+                      const daysIntoYear = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334][i];
+                      const x = padding.left + (daysIntoYear / 365) * plotWidth;
+                      return (
+                        <text key={month} x={x} y={graphHeight - 15} fill="#a8a29e" fontSize="11" textAnchor="middle">{month}</text>
+                      );
+                    })}
+                  </svg>
+                </div>
+              );
+            }
+            
+            // Calculate year data for each location
+            const yearDataByLocation = activeLocations.map(loc => {
+              const points = [];
+              for (let dayOfYear = 0; dayOfYear < 365; dayOfYear++) {
+                const d = new Date(currentYear, 0, dayOfYear + 1);
+                const dateStr = d.toISOString().split('T')[0];
+                const primarySolar = calculateSunriseSunset(location.lat, location.lng, dateStr);
+                const secondarySolar = calculateSunriseSunset(loc.lat, loc.lng, dateStr);
+                const shared = calculateSharedDaylight(primarySolar, secondarySolar);
+                const hours = shared.hours + shared.minutes / 60;
+                points.push({ day: dayOfYear, hours, date: d });
+              }
+              return { location: loc, points };
+            });
+            
+            // Colors for each line
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+            
+            // Find current day of year
+            const currentDate = new Date(date);
+            const startOfYear = new Date(currentYear, 0, 1);
+            const currentDayOfYear = Math.floor((currentDate - startOfYear) / (1000 * 60 * 60 * 24));
+            
+            return (
+              <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 mt-4">
+                <h3 className="text-base font-bold text-stone-300 mb-2">Annual Shared Daylight with {location.name}</h3>
+                <p className="text-xs text-stone-400 mb-4">Click to jump to a date</p>
+                
+                <svg width={graphWidth} height={graphHeight} className="w-full" >
+                  {/* Background */}
+                  <rect x={padding.left} y={padding.top} width={plotWidth} height={plotHeight} fill="#18181b" />
+                  
+                  {/* Grid lines */}
+                  {[0, 6, 12, 18, 24].map(hour => {
+                    const y = padding.top + plotHeight - (hour / 24) * plotHeight;
+                    return (
+                      <g key={hour}>
+                        <line x1={padding.left} y1={y} x2={padding.left + plotWidth} y2={y} stroke="#3f3f46" strokeWidth="1" />
+                        <text x={padding.left - 10} y={y} fill="#a8a29e" fontSize="10" textAnchor="end" alignmentBaseline="middle">{hour}h</text>
+                      </g>
+                    );
+                  })}
+                  
+                  {/* Month markers */}
+                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, i) => {
+                    const daysIntoYear = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334][i];
+                    const x = padding.left + (daysIntoYear / 365) * plotWidth;
+                    return (
+                      <text key={month} x={x} y={graphHeight - 15} fill="#a8a29e" fontSize="11" textAnchor="middle">{month}</text>
+                    );
+                  })}
+                  
+                  {/* Current date marker */}
+                  {(() => {
+                    const x = padding.left + (currentDayOfYear / 365) * plotWidth;
+                    return (
+                      <line x1={x} y1={padding.top} x2={x} y2={padding.top + plotHeight} stroke="#fbbf24" strokeWidth="2" strokeDasharray="4,4" opacity="0.6" />
+                    );
+                  })()}
+                  
+                  {/* Data lines */}
+                  {yearDataByLocation.map(({ location: loc, points }, idx) => {
+                    const color = colors[idx % colors.length];
+                    const pathData = points.map((p, i) => {
+                      const x = padding.left + (p.day / 365) * plotWidth;
+                      const y = padding.top + plotHeight - (p.hours / 24) * plotHeight;
+                      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+                    }).join(' ');
+                    
+                    return (
+                      <path
+                        key={loc.name}
+                        d={pathData}
+                        stroke={color}
+                        strokeWidth="2"
+                        fill="none"
+                        opacity="0.8"
+                      />
+                    );
+                  })}
+                  
+                  {/* Interactive overlay for clicking */}
+                  {Array.from({ length: 365 }, (_, dayOfYear) => {
+                    const x = padding.left + (dayOfYear / 365) * plotWidth;
+                    const width = plotWidth / 365;
+                    const d = new Date(currentYear, 0, dayOfYear + 1);
+                    const dateStr = d.toISOString().split('T')[0];
+                    
+                    return (
+                      <rect
+                        key={dayOfYear}
+                        x={x}
+                        y={padding.top}
+                        width={width}
+                        height={plotHeight}
+                        fill="transparent"
+                        cursor="pointer"
+                        onClick={() => setDate(dateStr)}
+                      >
+                        <title>{dateStr}</title>
+                      </rect>
+                    );
+                  })}
+                </svg>
+                
+                {/* Legend */}
+                <div className="flex flex-wrap gap-3 mt-3">
+                  {yearDataByLocation.map(({ location: loc }, idx) => {
+                    const color = colors[idx % colors.length];
+                    return (
+                      <div key={loc.name} className="flex items-center gap-2">
+                        <div style={{width: '16px', height: '3px', backgroundColor: color}}></div>
+                        <span className="text-xs text-stone-300">{loc.name}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center gap-2">
+                    <div style={{width: '16px', height: '3px', backgroundColor: '#fbbf24', opacity: 0.6}}></div>
+                    <span className="text-xs text-stone-300">Today</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Comparison Locations Sidebar */}
+        <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
+          <label className="block text-base font-bold mb-2 text-stone-300">Comparison Locations</label>
+          
+          <div className="mb-3">
+            <div className="text-xs font-medium text-stone-300 font-semibold mb-2">Quick Add</div>
+            <div className="grid grid-cols-2 gap-1">
+              {presetLocations.map(loc => {
+                const isAdded = referenceLocations.includes(loc.name);
+                return (
+                  <button
+                    key={loc.name}
+                    onClick={() => {
+                      if (isAdded) {
+                        setReferenceLocations(referenceLocations.filter(name => name !== loc.name));
+                      } else {
+                        setReferenceLocations([...referenceLocations, loc.name]);
+                      }
+                    }}
+                    className={`w-full text-left px-2 py-1 rounded text-xs border ${
+                      isAdded 
+                        ? 'bg-indigo-600 text-white border-indigo-600' 
+                        : 'bg-zinc-900 border-zinc-700 hover:border-indigo-500 text-stone-300'
+                    }`}
+                  >
+                    {isAdded ? '✓ ' : '+ '}{loc.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="border-t border-zinc-700 pt-3 mb-3">
+            <div className="text-xs font-medium text-stone-300 font-semibold mb-1">Add Custom Location</div>
+            <div className="text-xs text-stone-400 mb-2">or click the map</div>
+            <div className="space-y-1">
+              <input 
+                type="text" 
+                placeholder="Location name (optional)"
+                value={customRefName}
+                onChange={(e) => setCustomRefName(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs"
+              />
+              <input 
+                type="number" 
+                placeholder="Latitude"
+                value={customRefLat}
+                onChange={(e) => setCustomRefLat(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs"
+                step="0.0001"
+                min="-87"
+                max="87"
+              />
+              <input 
+                type="number" 
+                placeholder="Longitude"
+                value={customRefLng}
+                onChange={(e) => setCustomRefLng(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs"
+                step="0.0001"
+                min="-180"
+                max="180"
+              />
+              <button
+                onClick={() => {
+                  const lat = parseFloat(customRefLat);
+                  const lng = parseFloat(customRefLng);
+                  if (isNaN(lat) || isNaN(lng) || lat < LAT_MIN || lat > LAT_MAX || lng < -180 || lng > 180) {
+                    alert(`Please enter valid coordinates (Lat: ${LAT_MIN} to ${LAT_MAX}, Lng: -180 to 180)`);
+                    return;
+                  }
+                  const name = customRefName.trim() || `Custom (${lat.toFixed(2)}°, ${lng.toFixed(2)}°)`;
+                  setCustomRefLocations([{ lat, lng, name }, ...customRefLocations]);
+                  // Clear inputs
+                  setCustomRefLat('');
+                  setCustomRefLng('');
+                  setCustomRefName('');
+                }}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded text-xs border border-indigo-600"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          {referenceLocationsData.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-zinc-700">
+              <div className="text-base font-bold mb-2 text-stone-300">Solar Times (UTC)</div>
+              {referenceLocationsData.map((loc, i) => (
+                <div key={i} className="text-xs bg-zinc-900 border border-zinc-700 rounded p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-semibold text-white text-sm">{loc.name}</div>
+                    <button
+                      onClick={() => {
+                        if (loc.isCustom) {
+                          setCustomRefLocations(customRefLocations.filter(
+                            custom => !(custom.lat === loc.lat && custom.lng === loc.lng)
+                          ));
+                        } else if (loc.isPreset) {
+                          setReferenceLocations(referenceLocations.filter(name => name !== loc.name));
+                        }
+                      }}
+                      className="text-stone-400 hover:text-red-400 text-xs"
+                      title="Remove"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {loc.solar.sunrise ? (
+                    <>
+                      <div className="space-y-1 text-white mb-2">
+                        <div className="flex items-center gap-1">
+                          <Sun size={12} className="text-cyan-400" />
+                          <span className="font-medium">{loc.solar.sunrise}</span>
+                          {loc.solar.sunriseDate && (
+                            <span className="text-stone-400 text-[11px]">
+                              ({new Date(loc.solar.sunriseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Moon size={12} className="text-pink-500" />
+                          <span className="font-medium">{loc.solar.sunset}</span>
+                          {loc.solar.sunsetDate && (
+                            <span className="text-stone-400 text-[11px]">
+                              ({new Date(loc.solar.sunsetDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Clock size={12} className="text-yellow-400" />
+                          <span className="font-medium">{(() => {
+                            let sunriseMin = parseInt(loc.solar.sunrise.split(':')[0]) * 60 + parseInt(loc.solar.sunrise.split(':')[1]);
+                            let sunsetMin = parseInt(loc.solar.sunset.split(':')[0]) * 60 + parseInt(loc.solar.sunset.split(':')[1]);
+                            
+                            // Adjust for date offsets
+                            if (loc.solar.sunriseDate) sunriseMin -= 1440;
+                            if (loc.solar.sunsetDate) sunsetMin += 1440;
+                            
+                            const daylightMin = sunsetMin - sunriseMin;
+                            const hours = Math.floor(daylightMin / 60);
+                            const mins = daylightMin % 60;
+                            return `${hours}h ${mins}m`;
+                          })()}</span>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-zinc-700">
+                        <div className="text-yellow-400 font-semibold text-sm">
+                          {loc.shared && (loc.shared.hours > 0 || loc.shared.minutes > 0) ? (
+                            <>
+                              {loc.shared.hours > 0 && `${loc.shared.hours}h `}
+                              {loc.shared.minutes > 0 && `${loc.shared.minutes}m`}
+                              {' '}shared sunlight
+                            </>
+                          ) : loc.shared ? (
+                            <span className="text-stone-400 font-semibold">No shared daylight</span>
+                          ) : (
+                            <span className="text-stone-400 font-semibold">No shared daylight</span>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1 text-white mb-2">
+                        <div className="flex items-center gap-1">
+                          {loc.solar.midnightSun ? (
+                            <>
+                              <Sun size={12} className="text-cyan-400" />
+                              <span className="font-medium">Midnight sun</span>
+                            </>
+                          ) : loc.solar.polarNight ? (
+                            <>
+                              <Moon size={12} className="text-pink-500" />
+                              <span className="font-medium">Polar night</span>
+                            </>
+                          ) : (
+                            <span className="font-medium">No sunrise/sunset</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-zinc-700">
+                        <div className="text-yellow-400 font-semibold text-sm">
+                          {loc.shared && (loc.shared.hours > 0 || loc.shared.minutes > 0) ? (
+                            <>
+                              {loc.shared.hours > 0 && `${loc.shared.hours}h `}
+                              {loc.shared.minutes > 0 && `${loc.shared.minutes}m`}
+                              {' '}shared sunlight
+                            </>
+                          ) : (
+                            <span className="text-stone-400 font-semibold">No shared daylight</span>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<SharedSunlight />, document.getElementById('root'));
+  </script>
+</body>
+</html>
